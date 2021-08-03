@@ -1,13 +1,15 @@
 {
   "name": "cookie-consent-config-checker",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Validate consent categories, defaults and script loading boundaries.",
   "type": "module",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test"
+    "lint": "node --check src/index.mjs && node --check bin/cookie-consent-config-checker.mjs",
+    "test": "node --test",
+    "check": "npm run lint && npm test"
   },
   "license": "MIT",
   "repository": {

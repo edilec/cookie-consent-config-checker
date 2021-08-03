@@ -1,0 +1,1 @@
+{"schemaVersion":"1","complete":true,"categories":[{"id":"essential","required":true,"defaultGranted":true},{"id":"analytics","required":false,"defaultGranted":false}],"scripts":[{"id":"analytics-loader","category":"analytics"}]}
