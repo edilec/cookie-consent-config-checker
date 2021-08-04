@@ -38,3 +38,12 @@ test('malformed UTF-8 and malformed JSON are incomplete without echoing input',(
   writeFileSync(join(root,'capture.json'),'PRIVATE_SENTINEL');
   const badJson=invoke(root);assert.equal(badJson.status,2);assert.equal(JSON.parse(badJson.stdout).findings[0].ruleId,'input-unreadable');assert.doesNotMatch(badJson.stdout+badJson.stderr,/PRIVATE_SENTINEL/);
 }));
+test('duplicate decoded JSON keys reject ambiguous config and capture evidence',()=>fixture(root=>{
+  const duplicate=JSON.stringify(capture).replace('"complete":true','"complete":false,"comple\\u0074e":true');
+  writeFileSync(join(root,'capture.json'),duplicate);
+  const unknown=invoke(root);assert.equal(unknown.status,2);assert.equal(JSON.parse(unknown.stdout).status,'incomplete');
+  writeFileSync(join(root,'capture.json'),JSON.stringify(capture));
+  const config=JSON.stringify(policy).replace('"complete":true','"complete":false,"comple\\u0074e":true');
+  writeFileSync(join(root,'policy.json'),config);
+  const invalid=invoke(root);assert.equal(invalid.status,2);assert.equal(invalid.stdout,'');
+}));

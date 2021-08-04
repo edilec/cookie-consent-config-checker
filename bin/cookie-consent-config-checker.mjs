@@ -3,6 +3,20 @@ import {readFile,realpath,stat} from 'node:fs/promises';
 import {resolve,relative,isAbsolute,sep} from 'node:path';
 import {evaluateConsent,incomplete,LIMITS} from '../src/index.mjs';
 
+function duplicateKeys(text){
+  const stack=[];
+  for(const match of text.matchAll(/"(?:\\.|[^"\\])*"|[{}\[\],:]/gs)){
+    const token=match[0],top=stack.at(-1);
+    if(token==='{'){stack.push({kind:'object',key:true,seen:new Set()});continue;}
+    if(token==='['){stack.push({kind:'array'});continue;}
+    if(token==='}'||token===']'){stack.pop();continue;}
+    if(token===','){if(top?.kind==='object')top.key=true;continue;}
+    if(token===':')continue;
+    if(top?.kind==='object'&&top.key){const key=JSON.parse(token);if(top.seen.has(key))return true;top.seen.add(key);top.key=false;}
+  }
+  return false;
+}
+
 const args=process.argv.slice(2);
 if(args.length===1&&args[0]==='--help'){
   process.stdout.write('Usage: cookie-consent-config-checker --root DIR --policy FILE --capture FILE [--human]\nChecks exported consent policy and captured events; not legal advice.\n');
@@ -31,10 +45,13 @@ if(args.length===1&&args[0]==='--help'){
       if(metadata.size>limit)return {error:incomplete('byte-limit',file)};
       const bytes=await readFile(path,{signal:AbortSignal.timeout(LIMITS.milliseconds)});
       if(bytes.length>limit)return {error:incomplete('byte-limit',file)};
-      return {value:JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes))};
+      const text=new TextDecoder('utf-8',{fatal:true}).decode(bytes),value=JSON.parse(text);
+      if(duplicateKeys(text))return file==='@policy'?{invalidConfig:true}:{error:incomplete('input-invalid',file)};
+      return {value};
     }catch{return {error:incomplete('input-unreadable',file)};}
   }
   const p=await document(policyName,'@policy',LIMITS.policyBytes);
+  if(p.invalidConfig){process.stderr.write('Invalid policy configuration.\n');process.exit(2);}
   const c=await document(captureName,'@capture',LIMITS.captureBytes);
   const result=p.error||c.error||evaluateConsent(p.value,c.value);
   process.stdout.write(`${JSON.stringify(result)}\n`);
