@@ -1,7 +1,7 @@
 export const TOOL_ID='cookie-consent-config-checker';
 export const LIMITS=Object.freeze({policyBytes:262144,captureBytes:1048576,categories:100,scripts:1000,events:10000,depth:16,milliseconds:5000});
-export const RULE_SEVERITY=Object.freeze({'input-unreadable':'warning','input-invalid':'warning','export-incomplete':'warning','byte-limit':'warning','record-limit':'warning','depth-limit':'warning','time-limit':'warning','category-duplicate':'warning','script-duplicate':'warning','event-invalid':'warning','category-mismatch':'error','mapping-mismatch':'error','optional-default-granted':'error','required-default-denied':'error','script-before-consent':'error'});
-const MESSAGES=Object.freeze({'input-unreadable':'Input could not be read, decoded, or parsed.','input-invalid':'Consent document has unsupported or invalid fields.','export-incomplete':'Consent evidence does not assert complete coverage.','byte-limit':'Input exceeds its declared byte limit.','record-limit':'Consent record count exceeds its declared limit.','depth-limit':'JSON nesting exceeds depth 16.','time-limit':'Evaluation exceeded 5000 milliseconds.','category-duplicate':'Category identity is duplicated.','script-duplicate':'Script identity is duplicated.','event-invalid':'Captured event refers to unusable or unknown evidence.','category-mismatch':'Captured category configuration differs from policy.','mapping-mismatch':'Captured script mapping differs from policy.','optional-default-granted':'Optional category defaults to granted.','required-default-denied':'Required category defaults to denied.','script-before-consent':'Optional script loaded without granted consent.'});
+export const RULE_SEVERITY=Object.freeze({'input-unreadable':'warning','input-invalid':'warning','export-incomplete':'warning','byte-limit':'warning','record-limit':'warning','depth-limit':'warning','time-limit':'warning','category-duplicate':'warning','script-duplicate':'warning','event-invalid':'warning','script-unobserved':'warning','category-mismatch':'error','mapping-mismatch':'error','optional-default-granted':'error','required-default-denied':'error','script-before-consent':'error'});
+const MESSAGES=Object.freeze({'input-unreadable':'Input could not be read, decoded, or parsed.','input-invalid':'Consent document has unsupported or invalid fields.','export-incomplete':'Consent evidence does not assert complete coverage.','byte-limit':'Input exceeds its declared byte limit.','record-limit':'Consent record count exceeds its declared limit.','depth-limit':'JSON nesting exceeds depth 16.','time-limit':'Evaluation exceeded 5000 milliseconds.','category-duplicate':'Category identity is duplicated.','script-duplicate':'Script identity is duplicated.','event-invalid':'Captured event refers to unusable or unknown evidence.','script-unobserved':'Optional script load was not observed in the fixture.','category-mismatch':'Captured category configuration differs from policy.','mapping-mismatch':'Captured script mapping differs from policy.','optional-default-granted':'Optional category defaults to granted.','required-default-denied':'Required category defaults to denied.','script-before-consent':'Optional script loaded without granted consent.'});
 const cmp=(a,b)=>a<b?-1:a>b?1:0;
 const object=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const id=x=>typeof x==='string'&&/^[a-z][a-z0-9-]{0,63}$/.test(x);
@@ -49,6 +49,7 @@ export function evaluateConsent(policy,capture,{now=()=>performance.now()}={}){
   }
   if(timed())return incomplete('time-limit','@capture');
   const granted=new Map(policy.categories.map(x=>[x.id,x.defaultGranted]));
+  const loaded=new Set();
   let checked=policy.scripts.length;
   for(const [i,event] of capture.events.entries()){
     if(timed())return incomplete('time-limit','@capture');
@@ -60,12 +61,14 @@ export function evaluateConsent(policy,capture,{now=()=>performance.now()}={}){
     if(event.type==='load'){
       const mapped=pScripts.get(event.script);
       if(!id(event.script)||!mapped){findings.push(finding('event-invalid','@capture',`/events/${i}`));continue;}
+      loaded.add(event.script);
       checked++;
       if(!pCategories.get(mapped.category).required&&!granted.get(mapped.category))findings.push(finding('script-before-consent','@capture',`/events/${i}`));
       continue;
     }
     findings.push(finding('event-invalid','@capture',`/events/${i}`));
   }
+  for(const [i,item] of policy.scripts.entries())if(!pCategories.get(item.category).required&&!loaded.has(item.id))findings.push(finding('script-unobserved','@policy',`/scripts/${i}`));
   if(timed())return incomplete('time-limit','@capture');
   return report(findings,checked);
 }

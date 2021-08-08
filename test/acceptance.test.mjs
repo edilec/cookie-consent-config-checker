@@ -28,6 +28,14 @@ test('unknown load and missing completeness evidence cannot pass',()=>{
   assert.equal(evaluateConsent(policy(),c,{now:()=>0}).status,'incomplete');
   for(const side of ['policy','capture']){const p=policy(),d=capture();delete (side==='policy'?p:d).complete;assert.equal(evaluateConsent(p,d,{now:()=>0}).status,'incomplete');}
 });
+test('a complete fixture with no optional script load is unverified, not a vacuous pass',()=>{
+  const c=capture();c.events=[];
+  const r=evaluateConsent(policy(),c,{now:()=>0});assert.equal(r.status,'incomplete');assert.equal(r.findings[0].ruleId,'script-unobserved');
+});
+test('every mapped optional script must have an observed load',()=>{
+  const p=policy(),c=capture();p.scripts.push({id:'ads-loader',category:'analytics'});c.scripts=structuredClone(p.scripts);
+  const r=evaluateConsent(p,c,{now:()=>0});assert.equal(r.status,'incomplete');assert.deepEqual(r.findings.map(f=>[f.ruleId,f.location.pointer]),[['script-unobserved','/scripts/1']]);
+});
 test('a policy mapping to an absent category reports the policy source',()=>{
   const p=policy();p.scripts[0].category='absent';
   const r=evaluateConsent(p,capture(),{now:()=>0});assert.equal(r.status,'incomplete');assert.equal(r.findings[0].location.file,'@policy');
@@ -49,10 +57,10 @@ test('record and depth boundaries accept N and reject N+1',()=>{
   assert.equal(evaluateConsent(a,b,{now:()=>0}).status,'pass');x.extra={};assert.equal(evaluateConsent(a,b,{now:()=>0}).findings[0].ruleId,'depth-limit');
 });
 test('script and event counts each accept N and reject N+1',()=>{
-  const p=policy(),c=capture();p.scripts=Array.from({length:LIMITS.scripts},(_,i)=>({id:`script-${i}`,category:'analytics'}));c.scripts=structuredClone(p.scripts);c.events=[];
+  const p=policy(),c=capture();p.scripts=Array.from({length:LIMITS.scripts},(_,i)=>({id:`script-${i}`,category:'analytics'}));c.scripts=structuredClone(p.scripts);c.events=[{type:'grant',category:'analytics'},...p.scripts.map(x=>({type:'load',script:x.id}))];
   assert.equal(evaluateConsent(p,c,{now:()=>0}).status,'pass');
   p.scripts.push({id:'extra-script',category:'analytics'});assert.equal(evaluateConsent(p,c,{now:()=>0}).findings[0].ruleId,'record-limit');
-  const d=capture();d.events=Array.from({length:LIMITS.events},()=>({type:'grant',category:'analytics'}));
+  const d=capture();d.events=Array.from({length:LIMITS.events},()=>({type:'grant',category:'analytics'}));d.events.at(-1).type='load';d.events.at(-1).script='analytics-loader';
   assert.equal(evaluateConsent(policy(),d,{now:()=>0}).status,'pass');
   d.events.push({type:'grant',category:'analytics'});assert.equal(evaluateConsent(policy(),d,{now:()=>0}).findings[0].ruleId,'record-limit');
 });
